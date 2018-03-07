@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>TEXAS</title>
+<style>
+* {
+	font-size: 1.4rem;
+	text-align: center;
+}
+aside,section,article {
+	padding: 1rem;
+}
+input[type='text'] {
+	width: 15vw;
+}
+</style>
+</head>
+<body>
+<aside>
+	<input type="radio" id="p2" name="cards" onchange="refreshSection(2)"><label for="p2">2</label>&nbsp;&nbsp;
+	<input type="radio" id="p5" name="cards" onchange="refreshSection(5)"><label for="p5">5</label>&nbsp;&nbsp;
+	<input type="radio" id="p6" name="cards" onchange="refreshSection(6)"><label for="p6">6</label>&nbsp;&nbsp;
+	<input type="radio" id="p7" name="cards" onchange="refreshSection(7)"><label for="p7">7</label>&nbsp;&nbsp;
+</aside>
+<section></section>
+<article>
+	<input type="text" id="r1" readonly="readonly">
+	<input type="text" id="r2" readonly="readonly">
+	<input type="text" id="r3" readonly="readonly">
+	<br><br>
+	<button onclick="bestHand()">Best Hand</button>
+</article>
+
+<script src="linq.min.js"></script>
+<script>
+var CARDS;
+const POINTS = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 },
+refreshSection = (n) => {
+	document.querySelector("#r1").value = document.querySelector("#r2").value = document.querySelector("#r3").value = "";
+	CARDS = Enumerable.repeat("", n).toArray();
+	let sct = document.querySelector("section");
+	sct.innerHTML = "";
+	for (let c = 0; c < n; c++) {
+		let s = document.createElement("select");
+		s.setAttribute("c", c);
+		s.setAttribute("onchange", "selectChange(this)");
+		let o = document.createElement("option");
+		o.value = "-1";
+		o.innerHTML = "nil";
+		s.appendChild(o);
+		[ "♠", "♥", "♣", "♦" ].forEach(t => {
+			for (let k in POINTS) {
+				o = document.createElement("option");
+				o.value = t + k;
+				o.innerHTML = t + k;
+				s.appendChild(o);
+			}
+		});
+		sct.appendChild(s);
+		sct.innerHTML += "&nbsp;&nbsp;&nbsp;";
+	}
+},
+selectChange = (obj) => {
+	let v = obj.value;
+	if (v !== "-1") {
+		if (CARDS.indexOf(v) === -1) {
+			CARDS[obj.getAttribute("c")] = v;
+		} else {
+			obj.value = "-1";
+			alert("Card already exists.");
+		}
+	}
+};
+document.querySelector("#p5").click();
+
+const bestHand = () => {
+	if (CARDS.indexOf("") === -1) {
+		let ret;
+		if (CARDS.length === 2) {
+			ret = [ "high", "", "" ];
+			let c = CARDS[0][0], c1 = CARDS[0][1], c2 = CARDS[1][1];
+			c === CARDS[1][0] && (ret[2] = c);
+			c1 === c2 && (ret[0] = "1pair");
+			ret[1] = POINTS[c1] > POINTS[c2] ? c1 + c2 : c2 + c1;
+		} else {
+			ret = aboutFlush();
+			ret === undefined && (ret = other());
+		}
+		document.querySelector("#r1").value = ret[0];
+		document.querySelector("#r2").value = ret[1];
+		document.querySelector("#r3").value = ret[2];
+	} else {
+		alert("All the cards should be selected.");
+	}
+},
+aboutFlush = () => {
+	let max = Enumerable.from(CARDS).groupBy("$[0]", "$[1]", "{key:$,value:$$.toArray()}").where("$.value.length>=5").firstOrDefault(null);
+	if (max !== null) {
+		let ret = straight([ "flush", max.value.sort((e1, e2) => POINTS[e2] - POINTS[e1]).join(""), max.key ], false);
+		if (ret[0] !== "flush") {
+			ret[0] += "-flush";
+		}
+		return ret;
+	}
+	return undefined;
+},
+other = () => {
+	let data = Enumerable.from(CARDS).groupBy("$[1]", "", "{key:$,value:$$.count()}").toArray(),
+	times = Enumerable.from(data).groupBy("$.value", "", "{k:$,v:$$.count()}").toObject("$.k", "$.v"),
+	ret = [ "", "", "" ];
+	ret[1] = data.sort((e1, e2) => {
+		if (e1.value == e2.value) {
+			return POINTS[e2.key] - POINTS[e1.key];
+		} else {
+			return e2.value - e1.value;
+		}
+	}).reduce((r, e) => r + Enumerable.repeat(e.key, e.value).toArray().join(""), "");
+	if (times.hasOwnProperty("4")) {
+		ret[0] = "4kind";
+	} else if (times.hasOwnProperty("3") && times.hasOwnProperty("2")) {
+		ret[0] = "4house";
+	} else {
+		ret = straight(ret, true);
+		if (ret[0] === "") {
+			if (times.hasOwnProperty("3")) {
+				ret[0] = "3kind";
+			} else if (times.hasOwnProperty("2")) {
+				ret[0] = times["2"] === 2 ? "2pair" : "1pair";
+			} else {
+				ret[0] = "high";
+			}
+		} else {
+			ret[0] = "straight";
+		}
+	}
+	return ret;
+},
+straight = (ret, notFlush) => {
+	if (ret[1].match(/^AKQJT/)) {
+		ret[0] = "r";
+		ret[1] = "AKQJT";
+	} else if (ret[1][0] === "A" && (notFlush && ret[1].indexOf("5") !== -1 && ret[1].indexOf("4") !== -1 && ret[1].indexOf("3") !== -1 && ret[1].indexOf("2") !== -1 || !notFlush && ret[1].indexOf("5432") !== -1)) {
+		ret[0] = "s";
+		if ( ret[1].indexOf("6") !== -1) {
+			ret[1] =  ret[1].indexOf("7") !== -1 ? "76543" : "65432";
+		} else {
+			ret[1] = "5432A";
+		}
+	} else {
+		console.log(ret[1]);
+		let unit = ret[1].replace(/(.)\1+/g, "$1");
+		console.log(unit);
+		if (unit.length > 4) {
+			if (notFlush) {
+				unit = unit.split("").sort((e1, e2) => POINTS[e2] - POINTS[e1]).join("");
+				console.log(unit);
+			}
+			for (let i = 0; i < unit.length - 4; i++) {
+				if (POINTS[unit[i]] - POINTS[unit[i + 4]] === 4) {
+					ret[0] = "s";
+					ret[1] = unit.substring(i, i + 5);
+					console.log("haha");
+					break;
+				}
+			}
+		}
+		if (ret[1].length > 5) {
+			ret[1].substring(0, 5);
+		}
+	}
+	return ret;
+};
+</script>
+</body>
+</html>
